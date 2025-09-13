@@ -1,0 +1,18 @@
+{  
+  "name": "notionsyncgooglegalendar",  
+  "version": "1.0.0",  
+  "description": "NotionデータベースとGoogleカレンダーを自動同期するGoogle Apps Script（GAS）プロジェクトです。",  
+  "main": "main.js",  
+  "scripts": {  
+    "login": "clasp login",  
+    "create": "clasp create --type standalone",  
+    "push": "clasp push"  
+  },  
+  "keywords": [],  
+  "author": "",  
+  "license": "ISC",  
+  "type": "commonjs",  
+  "dependencies": {  
+    "@google/clasp": "^3.0.6-alpha"  
+  }  
+}  
