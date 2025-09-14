@@ -1,439 +1,333 @@
 <div align="center">  
 
-# 🔄 Sync Notion-GoogleCalendar
+# Sync Notion-GoogleCalendar
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)  
-[![Language: JavaScript](https://img.shields.io/badge/Language-JavaScript-f1e05a.svg)](https://github.com/yusuke-na/SyncNotionGoogleCalendar)  
-[![Platform: Google Apps Script](https://img.shields.io/badge/Platform-Google%20Apps%20Script-blue.svg)](https://developers.google.com/apps-script)  
-[![API: Notion](https://img.shields.io/badge/API-Notion-black.svg)](https://developers.notion.com/)  
-[![API: Google Calendar](https://img.shields.io/badge/API-Google%20Calendar-red.svg)](https://developers.google.com/calendar)  
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Language: JavaScript](https://img.shields.io/badge/Language-JavaScript-f1e05a.svg)](https://github.com/yusuke-na/SyncNotionGoogleCalendar) [![Platform: Google Apps Script](https://img.shields.io/badge/Platform-Google%20Apps%20Script-blue.svg)](https://developers.google.com/apps-script) [![API: Notion](https://img.shields.io/badge/API-Notion-black.svg)](https://developers.notion.com/) [![API: Google Calendar](https://img.shields.io/badge/API-Google%20Calendar-red.svg)](https://developers.google.com/calendar)  
 
-**✨ Notionデータベースと Googleカレンダーを双方向で同期する**  
-**🚀 Google Apps Script（GAS）プロジェクト**  
+**[🇯🇵 日本語版 README はこちら / Japanese README](README_JP.md)**  
 
-[📋 セットアップ](#️-セットアップ手順) • [🔧 設定](#-設定項目) • [📖 使用方法](#-使用方法) • [🛠️ トラブルシューティング](#️-トラブルシューティング)  
-
----
+**A Google Apps Script project that provides bidirectional synchronization between Notion databases and Google Calendar.**  
+**Automatically sync tasks and schedules managed in Notion to Google Calendar.**  
 
 </div>  
 
-## ✨ 機能概要
+## ✨ Features Overview
 
-<table align="center">
-<tr>
-<td width="50%">
+- **🔄 Auto Sync**: Automatically synchronizes Notion items with "Schedule" tags to Google Calendar every 15 minutes
+- **📅 Date Processing**: Supports all-day events, timed events, and period events
+- **🛡️ Duplicate Prevention**: Prevents duplicate creation using Event IDs
+- **↔️ Bidirectional Sync**: Reflects changes and deletions in Notion to the calendar
 
-### 🔄 同期機能
-- **🤖 自動同期**: NotionのScheduleタグが付いたアイテムを自動的にGoogleカレンダーに同期
-- **↔️ 双方向同期**: Notionでの変更をカレンダーに反映、削除も同期
-- **🛡️ 重複防止**: Event IDによる重複作成防止
+## 🚀 Setup
 
-</td>
-<td width="50%">
+### 1️⃣ Prerequisites
+- Node.js (v16 or later)
+- npm
+- Google Account
+- Notion Account
 
-### 📅 日付・時刻処理
-- **📊 日付範囲対応**: Action Dayの開始日・終了日を取得してカレンダーに反映
-- **🌅 終日イベント**: 時刻未設定の日付は終日イベントとして処理
-- **⏰ 時刻付きイベント**: 時刻付き日付は適切にスケジュールされたイベントとして処理
+### 2️⃣ Notion API Configuration
 
-</td>
-</tr>
-<tr>
-<td width="50%">
+#### Creating Notion Integration
+1. Access [Notion Developers](https://www.notion.so/my-integrations)
+2. Click **"+ New integration"**
+3. Enter integration name (e.g., `GoogleCalendar-Sync`)
+4. Click **"Submit"**
+5. Copy and save the **Internal Integration Token**
 
-### ⚙️ システム機能
-- **🔄 定期実行**: 15分間隔での自動同期（設定変更可能）
-- **🛠️ エラーハンドリング**: 詳細なログとエラー処理
+#### Obtaining Database Information
+1. Open the Notion database to be synchronized
+2. Get the **Database ID** from the URL
+   - `https://notion.so/workspace/{database-id}?v={view-id}`
+   - The `{database-id}` part is the database ID
+3. Get the **"Schedule tag" Page ID**
+   - Click on the Schedule tag → Get the page ID from the URL
 
-</td>
-<td width="50%">
+#### Database Sharing Settings
+1. Click "⋯" at the top right of the database → "Add connections"
+2. Select and add the created integration
 
-### 🎯 対応範囲
-- **📈 処理能力**: 1回最大1000件のイベント処理
-- **📅 期間**: 過去1ヶ月〜未来3ヶ月の範囲で同期
+### 3️⃣ Google APIs Configuration
 
-</td>
-</tr>
-</table>
+#### Google Cloud Console Setup
+1. Access [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable **Google Calendar API**
+   - "APIs & Services" → "Library"
+   - Search for "Google Calendar API" and enable it
+4. Enable **Google Apps Script API**
+   - Follow the same procedure to enable
 
-## 📊 使用するNotionデータベース
+### 4️⃣ Building Google Apps Script Project with npm and clasp
 
-<div align="center">
-
-### 🗃️ データベース構造
-![Notionデータベースプロパティ](https://github.com/yusuke-na/SyncNotionGoogleCalendar/blob/main/img/notion-database-property.png?raw=true)
-
-### 🏷️ Scheduleタグ設定  
-![NotionのScheduleタグ](https://github.com/yusuke-na/SyncNotionGoogleCalendar/blob/main/img/notion-tags-schedule.png?raw=true)
-
-</div>  
-
-## 🛠️ セットアップ手順
-
-<details>
-<summary>📋 <strong>目次</strong> - セットアップ手順一覧</summary>
-
-1. [📋 前提条件](#1--前提条件)
-2. [📁 プロジェクトの準備](#2--プロジェクトの準備)
-3. [📦 依存関係のインストール](#3--依存関係のインストール)
-4. [🔐 Google Apps Script CLIの認証](#4--google-apps-script-cliの認証)
-5. [🚀 Google Apps Scriptプロジェクトの作成とデプロイ](#5--google-apps-scriptプロジェクトの作成とデプロイ)
-6. [📅 Google Calendar APIの有効化](#6--google-calendar-apiの有効化)
-7. [⚙️ スクリプトプロパティの設定](#7--スクリプトプロパティの設定)
-
-</details>
-
----
-
-### 1. 📋 前提条件
-
-> **必要なツールとアカウント**
-
-- 🟢 **Node.js** (v16以上推奨)
-- 📦 **npm**
-- 🔐 **Googleアカウント**
-
-### 2. 📁 プロジェクトの準備
-
-1. プロジェクトをクローンまたはダウンロード
-2. プロジェクトディレクトリに移動
-
+#### Installing and Authenticating clasp
 ```bash
-cd NotionSyncGoogleGalendar
-```
+# Navigate to the project folder
+cd SyncNotionGoogleCalendar
 
-### 3. 📦 依存関係のインストール
+# Install dependencies
+npm install
 
-```bash
-npm ci
-```
-
-### 4. 🔐 Google Apps Script CLIの認証
-
-```bash
+# Login to Google account with clasp
 npm run login
 ```
 
-> **📝 手順**
-> - ブラウザが自動的に開きます
-> - Googleアカウントでログイン
-> - 必要な権限を許可してください
-
-### 5. 🚀 Google Apps Scriptプロジェクトの作成とデプロイ
-
-<table>  
-<tr>  
-<td width="50%">  
-
-#### 🆕 新規プロジェクトを作成する場合
-
+#### Creating and Deploying Google Apps Script Project
 ```bash
+# Create a new GAS project (first time only)
 npm run create
-```
 
-</td>  
-<td width="50%">  
-
-#### 📤 既存プロジェクトにプッシュする場合
-
-```bash
+# Push code to Google Apps Script
 npm run push
 ```
 
-</td>  
-</tr>  
-</table>  
+### 5️⃣ Google Apps Script Configuration
 
-### 6. 📅 Google Calendar APIの有効化
+#### Setting Script Properties
+1. Access [Google Apps Script](https://script.google.com/)
+2. Open the created project
+3. Left menu "Project Settings" → "Script properties"
+4. Add the following properties:
 
-> **⚠️ 重要**: 以下のいずれかの方法でAPIを有効化してください
+| Property Name        | Value                             | Description                       |
+| -------------------- | --------------------------------- | --------------------------------- |
+| `NOTION_API_KEY`     | `secret_xxxxx...`                 | Notion Internal Integration Token |
+| `NOTION_DATABASE_ID` | `xxxxxxxxx...`                    | Target Notion Database ID         |
+| `SCHEDULE_TAG_ID`    | `xxxxxxxxx...`                    | "Schedule" tag Page ID            |
+| `CALENDAR_ID`        | `primary` or specific calendar ID | Target Google Calendar (optional) |
 
-1. **GASエディタから**: 「サービス」→「Google Calendar API」を追加
-2. **Google Cloud Consoleから**: [Google Cloud Console](https://console.cloud.google.com/) でCalendar APIを有効化
+#### Enabling Required API Services
+1. Left menu "Services"
+2. Enable **Google Calendar API** (select v3)
 
-### 7. ⚙️ スクリプトプロパティの設定
+### 6️⃣ Notion Database Configuration
 
-#### 📝 Notion設定手順
+To ensure proper synchronization, the following properties are required in the Notion database:  
 
-1. 🔗 [Notion Developers](https://www.notion.so/my-integrations) でインテグレーションを作成
-2. 🔑 APIキーを取得
-3. ⚙️ GASエディタで「プロジェクトの設定」→「スクリプト プロパティ」
+| Property Name  | Type     | Required | Description                                  |
+| -------------- | -------- | -------- | -------------------------------------------- |
+| **Title**      | Title    | ✅        | Event title                                  |
+| **Action Day** | Date     | ✅        | Event date and time                          |
+| **Tags**       | Relation | ✅        | Relation containing "Schedule" tag           |
+| **Status**     | Status   | ❌        | Task status                                  |
+| **Event ID**   | Text     | ❌        | Google Calendar Event ID (automatically set) |
+| **URL**        | URL      | ❌        | Related links                                |
 
-#### 🗂️ 必要なプロパティ
+## 📖 Usage
 
-| キー                    | 説明                                   | 必須 |
-| ----------------------- | -------------------------------------- | ---- |
-| `NOTION_API_KEY`        | 取得したAPIキー                        | ✅    |
-| `NOTION_DATABASE_ID`    | NotionデータベースのID                 | ✅    |
-| `NOTION_DATA_SOURCE_ID` | Notionデータソース（コレクション）のID | ✅    |
-| `SCHEDULE_TAG_ID`       | ScheduleタグのページID                 | ✅    |
-| `CALENDAR_ID`           | 使用するカレンダーID                   | ⚫    |
+### 1️⃣ Initial Setup Execution
 
-> **💡 ヒント**: `CALENDAR_ID`未設定の場合は`primary`（メインカレンダー）を使用
-
-### 8. 🔍 Notion IDの取得方法
-
-<details>  
-<summary>📱 <strong>NOTION_DATABASE_ID と NOTION_DATA_SOURCE_ID の取得</strong></summary>  
-
-#### 🎯 手順
-1. **📂 データベースを開く**: Notionで同期対象のデータベースを開く
-2. **🔗 URLを確認**: ブラウザのURL欄を確認
-   ```
-   https://www.notion.so/workspace/Database-Name-[DATABASE_ID]?v=[VIEW_ID]
-   ```
-3. **📝 DATABASE_IDをコピー**: `DATABASE_ID`の部分を `NOTION_DATABASE_ID` に設定
-4. **🔧 開発者ツールを開く**: F12でNetworkタブを確認
-5. **🔎 Collection IDを探す**: API呼び出しで`collection://[COLLECTION_ID]` 形式のIDを探す
-6. **📋 COLLECTION_IDをコピー**: `COLLECTION_ID`を `NOTION_DATA_SOURCE_ID` に設定
-
-</details>  
-
-<details>  
-<summary>🏷️ <strong>SCHEDULE_TAG_ID の取得</strong></summary>  
-
-#### 🎯 手順
-1. **🏷️ Scheduleタグのページを開く**: Notionでタグページにアクセス
-2. **🔗 ページIDを取得**: ブラウザのURL欄から取得
-   ```
-   https://www.notion.so/workspace/Schedule-[PAGE_ID]
-   ```
-3. **📝 PAGE_IDをコピー**: `PAGE_ID`（ハイフン付き）を `SCHEDULE_TAG_ID` に設定
-
-</details>  
-
-### 9. 🔐 Notion インテグレーションのアクセス設定
-
-> **🔑 権限設定**
-
-1. 🔗 [Notion Developers](https://www.notion.so/my-integrations) で作成したインテグレーションを選択
-2. 🔧 「アクセス」→「アクセス権限を編集」
-3. ✅ 連携するデータベースを選択
-
-### 10. 🚀 初期設定の実行
+Execute initial setup in Google Apps Script editor:  
 
 ```javascript
-// GASエディタで以下の関数を実行
+// Execute initialization function (first time only)
 initialize();
 ```
 
-> **✅ 完了**: これで基本的なセットアップが完了です！
+This function performs the following:  
+- Verifies script properties
+- Tests Google Calendar API connection
+- Sets up automatic sync trigger (15-minute intervals)
 
-## 🔧 設定項目
+### 2️⃣ Schedule Management in Notion
 
-### ⚙️ コード設定
-`main.js` の `CONFIG` オブジェクトで以下の設定が可能：  
+#### Creating Schedule Items
+1. Create a new page in the Notion database
+2. Enter event name in **Title**
+3. Set date and time in **Action Day**:
+   - **All-day event**: Date only (e.g., `2023-12-25`)
+   - **Timed event**: Specify date and time (e.g., `2023-12-25 14:30`)
+   - **Period event**: Set start and end date/time
+4. Add "Schedule" tag to **Tags**
 
-```javascript
-const CONFIG = {  
-   // ... 他の設定
-  
-  // 🔄 同期設定  
-  SYNC_INTERVAL_MINUTES: 15, // 同期間隔（分）  
-  MAX_RETRY_COUNT: 3, // API呼び出し失敗時の最大リトライ回数  
-  
-  // 📝 ログ設定  
-  LOG_LEVEL: 'INFO' // DEBUG, INFO, WARN, ERROR  
-}; 
+#### Sync Target Conditions
+- ✅ "Schedule" tag is included in `Tags`
+- ✅ `Action Day` is set
+- ❌ Items not meeting the above criteria are excluded from sync
+
+### 3️⃣ Automatic Sync Operation
+
+#### Sync Timing
+- **Automatic sync**: Executes every 15 minutes
+- **Manual sync**: Execute `manualSync()` in Google Apps Script editor
+
+#### Synchronized Operations
+| Notion Operation      | Google Calendar |
+| --------------------- | --------------- |
+| 📝 Create new          | ➕ Create event  |
+| ✏️ Change title        | 🔄 Update event  |
+| 📅 Change date/time    | 🔄 Update event  |
+| ❌ Remove Schedule tag | 🗑️ Delete event  |
+| 🗑️ Delete page         | 🗑️ Delete event  |
+
+### 4️⃣ Event Format Examples
+
+#### All-Day Event
+```
+Title: Meeting Preparation
+Action Day: 2023-12-25
+→ Google Calendar: 12/25 all-day event
 ```
 
-### 📅 カレンダーID設定
-
-> **💡 設定方法**: スクリプトプロパティで`CALENDAR_ID`を設定することで、使用するカレンダーを変更できます
-
-| 設定値               | 説明                   | 例                                               |
-| -------------------- | ---------------------- | ------------------------------------------------ |
-| **未設定**           | メインカレンダーを使用 | `'primary'`                                      |
-| **メールアドレス**   | 自分のメインカレンダー | `'your-email@gmail.com'`                         |
-| **専用カレンダーID** | 特定の専用カレンダー   | `'c_1234567890abcdef@group.calendar.google.com'` |
-
-#### 🔍 専用カレンダーIDの取得方法
-
-<details>  
-<summary>📋 <strong>手順</strong></summary>  
-
-1. 🔗 [Googleカレンダー](https://calendar.google.com)を開く
-2. 📂 左側のカレンダーリストで対象カレンダーの「⋮」→「設定と共有」
-3. ⚙️ 「カレンダーの統合」セクションの「カレンダーID」をコピー
-4. 📝 スクリプトプロパティの`CALENDAR_ID`に設定
-
-</details>  
-
-## 📖 使用方法
-
-### 🤖 自動同期
-
-> **⏰ 自動実行**  
-> - ✅ 初期設定完了後、15分間隔で自動同期が実行されます  
-> - 🏷️ NotionでScheduleタグを付けたアイテムが自動的にカレンダーに追加されます  
-
-### ✋ 手動同期
-
-```javascript
-// 手動で同期を実行
-manualSync();
+#### Timed Event
+```
+Title: Team Meeting
+Action Day: 2023-12-25 14:00 → 2023-12-25 15:30
+→ Google Calendar: 12/25 14:00-15:30
 ```
 
-### 🧪 テスト機能
-
-<table>  
-<tr>  
-<td width="50%">  
-
-#### 📅 日付処理テスト
-```javascript
-testDateProcessing();
+#### Multi-Day Event
+```
+Title: Business Trip
+Action Day: 2023-12-25 → 2023-12-27
+→ Google Calendar: 12/25-12/27 all-day event
 ```
 
-</td>  
-<td width="50%">  
+### 5️⃣ Sync Status Verification
 
-#### 🔄 同期機能テスト  
-```javascript
-testImprovedSync();
+#### Tracking with Event ID
+- Synchronized Notion pages automatically have **Event ID** set
+- This ID manages the connection with Google Calendar
+- Pages with Event ID are already synchronized
+
+#### Checking Sync Logs
+Check sync status in Google Apps Script editor execution logs:  
+```
+=== Sync Process Started ===
+Retrieved 3 schedule items from Notion
+Retrieved 5 events from Google Calendar
+=== Sync Process Completed ===
+Created: 1, Updated: 1, Deleted: 0
+```  
+
+## 🔧 Troubleshooting
+
+### ❌ Common Errors and Solutions
+
+#### 1. **Notion API Connection Error**
+```
+Error: Notion API Error (401): Unauthorized
 ```
 
-</td>  
-</tr>  
-<tr>  
-<td colspan="2" align="center">  
+**Causes and Solutions:**  
+- ❌ **NOTION_API_KEY** is not set correctly
+  - ✅ Verify the Internal Integration Token obtained from Notion Developers
+  - ✅ Set correctly in Google Apps Script script properties
+- ❌ Integration not added to database
+  - ✅ Notion database → "⋯" → "Add connections" to add integration
 
-#### 🎯 全体テストスイート
-```javascript
-runAllTests();
+#### 2. **Unable to Retrieve Schedule Items**
+```
+Log: Retrieved 0 schedule items from Notion
 ```
 
-</td>  
-</tr>  
-</table>  
+**Causes and Solutions:**  
+- ❌ **SCHEDULE_TAG_ID** is incorrect
+  - ✅ Open "Schedule" tag page and verify page ID from URL
+  - ✅ Page ID is a 32-character string including hyphens
+- ❌ No items with "Schedule" tag in database
+  - ✅ Create items in Notion and add "Schedule" tag
+  - ✅ Verify that Action Day is also set
 
-### ✅ 同期対象の条件
+#### 3. **Google Calendar API Connection Error**
+```
+Error: Google Calendar API is not enabled
+```
 
-> **📋 必要な条件**: 以下の条件をすべて満たすアイテムが同期されます
+**Causes and Solutions:**  
+- ❌ Calendar API not enabled in Google Apps Script
+  - ✅ Google Apps Script → "Services" → Add Google Calendar API v3
+- ❌ Calendar API disabled in Google Cloud Console
+  - ✅ Google Cloud Console → APIs & Services → Library → Enable Google Calendar API
 
-1. **🏷️ Tags**: 「Schedule」が含まれている
-2. **📅 Action Day**: 日付が設定されている  
-3. **📊 Status**: 「Trash」以外のステータス
+#### 4. **Sync Not Executing**
+```
+Log: Trigger not set
+```
 
-## 🗃️ データベース構造
+**Causes and Solutions:**  
+- ❌ Periodic execution trigger not set
+  - ✅ Google Apps Script → Triggers → Verify 15-minute interval trigger for `syncNotionWithGoogleCalendar` function
+  - ✅ Or execute `initialize()` function to automatically set trigger
 
-<table>  
-<tr>  
-<td width="50%">  
+#### 5. **Date Format Error**
+```
+Error: Valid Action Day is not set
+```
 
-### 📋 Notion
+**Causes and Solutions:**  
+- ❌ Notion Action Day property is empty
+  - ✅ Set appropriate date in Notion Action Day
+- ❌ Action Day format is incorrect
+  - ✅ All-day: `2023-12-25`
+  - ✅ Timed: `2023-12-25T14:30:00`
+  - ✅ Period: Set start date → end date
 
-| フィールド       | 説明                           | 例                        |
-| ---------------- | ------------------------------ | ------------------------- |
-| **📝 Title**      | イベントのタイトル             | `重要な会議`              |
-| **🏷️ Tags**       | カテゴリタグ（Scheduleを含む） | `Schedule, Work`          |
-| **📅 Action Day** | イベントの日付                 | 下記参照                  |
-| **📊 Status**     | ステータス                     | `Active`, `Done`, `Trash` |
-| **🆔 Event ID**   | Googleカレンダーのイベント ID  | 自動設定                  |
-| **🔗 URL**        | 関連URL                        | `https://example.com`     |
+#### 6. **Permission Error**
+```
+Error: Insufficient permissions
+```
 
-#### 📅 Action Day の形式
+**Causes and Solutions:**  
+- ❌ Calendar scope insufficient in Google Apps Script
+  - ✅ Approve required permissions when executing script
+  - ✅ Click "Review permissions" on "Authorization required" screen
 
-| 形式     | 例                         | 結果           |
-| -------- | -------------------------- | -------------- |
-| 日付のみ | `2023-12-25`               | 🌅 終日イベント |
-| 時刻付き | `2023-12-25T14:30:00.000Z` | ⏰ 時刻指定     |
-| 期間指定 | 開始日〜終了日             | 📊 期間イベント |
+### 🔍 Debugging Methods
 
-</td>  
-<td width="50%">  
+#### Checking Logs
+1. Google Apps Script → "Execute" → Run any function
+2. Check error details in "Execution log"
+3. Add `Logger.log()` for detailed debugging
 
-### 📅 Google Calendar
+#### Manual Testing
+```javascript
+// Testing individual functions
+function testNotionConnection() {
+  const items = getNotionScheduleItems();
+  Logger.log(`Number of items retrieved: ${items.length}`);
+  items.forEach(item => Logger.log(item.title));
+}
 
-| 項目            | 設定元       | 説明             |
-| --------------- | ------------ | ---------------- |
-| **📝 タイトル**  | Notion Title | イベント名       |
-| **📅 日付/時刻** | Action Day   | 下記参照         |
-| **📄 説明**      | 自動生成     | Notion情報を含む |
-| **🎨 色**        | 設定可能     | カレンダーの色   |
+function testCalendarConnection() {
+  const events = getGoogleCalendarEvents();
+  Logger.log(`Number of events retrieved: ${events.length}`);
+}
+```
 
-#### 📅 日付/時刻の対応
+#### Verifying Configuration Values
+```javascript
+function checkConfiguration() {
+  const config = {
+    apiKey: CONFIG.NOTION_API_KEY ? 'Set' : 'Not set',
+    databaseId: CONFIG.NOTION_DATABASE_ID ? 'Set' : 'Not set',
+    scheduleTagId: CONFIG.SCHEDULE_TAG_ID ? 'Set' : 'Not set'
+  };
+  Logger.log(config);
+}
+```
 
-| 条件               | 結果               |
-| ------------------ | ------------------ |
-| **日付のみ設定**   | 🌅 終日イベント     |
-| **時刻が含まれる** | ⏰ 時刻指定イベント |
-| **開始日≠終了日**  | 📊 期間イベント     |
+### ⚠️ Important Notes
 
-</td>  
-</tr>  
-</table>  
+- **Rate Limits**: Notion API allows maximum 3 requests per second
+- **Time Zone**: Set to `Asia/Tokyo` by default
+- **Sync Range**: Only targets events from 30 days ago to 90 days in the future
+- **Duplicate Prevention**: Prevents duplicate creation through Event ID linking  
 
-## 🛠️ トラブルシューティング
+## 🗃️ Notion Database Items Used in This Project
 
-### 🚨 よくある問題
+![Notion Database Properties](https://github.com/yusuke-na/SyncNotionGoogleCalendar/blob/main/img/notion-database-property.png?raw=true)  
+![Notion Schedule Tags](https://github.com/yusuke-na/SyncNotionGoogleCalendar/blob/main/img/notion-tags-schedule.png?raw=true)  
 
-<details>  
-<summary>❌ <strong>同期されない</strong></summary>  
+## 📄 License
 
-#### 🔍 確認項目
-- ✅ **Notion APIキー**: 正しく設定されているか確認
-- ✅ **データベース共有**: インテグレーションと共有されているか確認
-- ✅ **必須フィールド**: ScheduleタグとAction Dayが設定されているか確認
+This project is licensed under the **[MIT License](https://github.com/yusuke-na/SyncNotionGoogleCalendar/blob/main/LICENSE)**.   
 
-</details>  
+### 🤝 Contributing
 
-<details>  
-<summary>🔒 <strong>権限エラー</strong></summary>  
+Contributions to this project are welcome!  
+- 🐛 Bug reports
+- 💡 Feature suggestions  
+- 🔧 Pull requests
 
-#### 🔍 確認項目
-- ✅ **Google Calendar API**: 有効化されているか確認
-- ✅ **GAS実行権限**: 適切な権限が付与されているか確認
-
-</details>  
-
-<details>  
-<summary>📅 <strong>カレンダーが見つからないエラー</strong></summary>  
-
-#### 🔍 確認項目
-- ✅ **CALENDAR_ID設定**: スクリプトプロパティが正しく設定されているか
-- ✅ **カレンダー存在**: 設定したカレンダーIDが存在し、アクセス権限があるか
-- 💡 **デフォルト**: 未設定の場合は`primary`（メインカレンダー）を使用
-
-</details>  
-
-<details>  
-<summary>🔄 <strong>重複作成</strong></summary>  
-
-#### 🔧 対処法
-- ✅ **Event ID確認**: フィールドが正しく更新されているか確認
-- 🗑️ **手動リセット**: Event IDをクリアして再同期
-
-</details>  
-
----
-
-## ⚠️ 制限事項
-
-> **📋 システム制限**
-
-| 項目           | 制限                         |
-| -------------- | ---------------------------- |
-| **⏰ 同期間隔** | 最短1分                      |
-| **📅 同期期間** | 過去1ヶ月〜未来3ヶ月         |
-| **📊 処理件数** | 1回最大1000件                |
-| **🔄 API制限**  | Notion APIのレート制限に準拠 |
-
----
-
-## 📜 ライセンス
-
-> **MIT License** 📄  
-
----
-
-## 🆘 サポート
-
-> **💡 ヒント**: 問題が発生した場合は、実行ログを確認してください。  
-> 詳細なエラー情報が記録されています。
-
-<div align="center">
-
-**🎉 Happy Syncing! 🎉**
-
-</div>  
+Please feel free to report details in [GitHub Issues](https://github.com/yusuke-na/SyncNotionGoogleCalendar/issues).  
