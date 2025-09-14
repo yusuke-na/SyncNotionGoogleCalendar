@@ -2,11 +2,7 @@
 
 # 🔄 Sync Notion-GoogleCalendar
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)  
-[![Language: JavaScript](https://img.shields.io/badge/Language-JavaScript-f1e05a.svg)](https://github.com/yusuke-na/SyncNotionGoogleCalendar)  
-[![Platform: Google Apps Script](https://img.shields.io/badge/Platform-Google%20Apps%20Script-blue.svg)](https://developers.google.com/apps-script)  
-[![API: Notion](https://img.shields.io/badge/API-Notion-black.svg)](https://developers.notion.com/)  
-[![API: Google Calendar](https://img.shields.io/badge/API-Google%20Calendar-red.svg)](https://developers.google.com/calendar)  
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Language: JavaScript](https://img.shields.io/badge/Language-JavaScript-f1e05a.svg)](https://github.com/yusuke-na/SyncNotionGoogleCalendar) [![Platform: Google Apps Script](https://img.shields.io/badge/Platform-Google%20Apps%20Script-blue.svg)](https://developers.google.com/apps-script) [![API: Notion](https://img.shields.io/badge/API-Notion-black.svg)](https://developers.notion.com/) [![API: Google Calendar](https://img.shields.io/badge/API-Google%20Calendar-red.svg)](https://developers.google.com/calendar)  
 
 **✨ Notionデータベースと Googleカレンダーを双方向で同期する**  
 **🚀 Google Apps Script（GAS）プロジェクト**  
