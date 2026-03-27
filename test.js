@@ -459,109 +459,145 @@ function testImprovedSync() {
 }
 
 /**
- * 重複する[Notion-Sync]イベントをクリーンアップ
- * 同一Notion IDを持つイベントが複数ある場合、最新の1件のみを残して削除する
+ * 重複する[Notion-Sync]イベントをクリーンアップ（再開可能）
+ * 2週間ずつ処理し、進捗をScriptPropertiesに保存。タイムアウト時は再実行で続きから処理する。
  * @param {boolean} dryRun - trueの場合はログ出力のみ（実削除しない）
  */
 function cleanupDuplicateEvents(dryRun) {
   if (dryRun === undefined) dryRun = true;
-  Logger.log(`=== 重複イベントクリーンアップ ${dryRun ? '(ドライラン)' : '(実行)'} ===`);
+
+  const CHUNK_DAYS = 14;
+  const TIME_LIMIT_MS = 5 * 60 * 1000; // 5分で安全に停止（GAS上限6分）
+  const startTime = Date.now();
+  const props = PropertiesService.getScriptProperties();
+  const PROGRESS_KEY = 'CLEANUP_PROGRESS';
+
+  const now = new Date();
+  const rangeStart = new Date(now.getTime() - (180 * 24 * 60 * 60 * 1000));
+  const rangeEnd = new Date(now.getTime() + (180 * 24 * 60 * 60 * 1000));
+
+  // 前回の進捗を復元
+  let saved = null;
+  try { saved = JSON.parse(props.getProperty(PROGRESS_KEY)); } catch (_) {}
+  const resumeFrom = saved ? new Date(saved.nextChunkStart) : rangeStart;
+  let totalDuplicates = saved ? saved.totalDuplicates : 0;
+  let totalDeleted = saved ? saved.totalDeleted : 0;
+  const isResumed = saved !== null;
+
+  if (isResumed) {
+    Logger.log(`=== クリーンアップ再開 ${dryRun ? '(ドライラン)' : '(実行)'} ===`);
+    Logger.log(`前回の進捗: 重複${totalDuplicates}件検出, ${totalDeleted}件削除済, ${resumeFrom.toISOString().split('T')[0]}から再開`);
+  } else {
+    Logger.log(`=== 重複イベントクリーンアップ開始 ${dryRun ? '(ドライラン)' : '(実行)'} ===`);
+    Logger.log(`対象範囲: ${rangeStart.toISOString().split('T')[0]} 〜 ${rangeEnd.toISOString().split('T')[0]}`);
+  }
 
   try {
-    const now = new Date();
-    const rangeStart = new Date(now.getTime() - (180 * 24 * 60 * 60 * 1000));
-    const rangeEnd = new Date(now.getTime() + (180 * 24 * 60 * 60 * 1000));
+    let chunkStart = new Date(resumeFrom);
+    let completed = false;
 
-    // 1ヶ月ごとのチャンクに分割して取得（Backend Error回避）
-    const allItems = [];
-    let chunkStart = new Date(rangeStart);
     while (chunkStart < rangeEnd) {
+      if (Date.now() - startTime > TIME_LIMIT_MS) {
+        Logger.log(`⏱ 実行時間上限に近づいたため中断します。再実行で続きから処理されます。`);
+        props.setProperty(PROGRESS_KEY, JSON.stringify({
+          nextChunkStart: chunkStart.toISOString(),
+          totalDuplicates, totalDeleted
+        }));
+        Logger.log(`--- 中間結果 --- 重複: ${totalDuplicates}件, 削除: ${totalDeleted}件`);
+        return { totalDuplicates, totalDeleted, completed: false };
+      }
+
       const chunkEnd = new Date(Math.min(
-        chunkStart.getTime() + (30 * 24 * 60 * 60 * 1000),
+        chunkStart.getTime() + (CHUNK_DAYS * 24 * 60 * 60 * 1000),
         rangeEnd.getTime()
       ));
-      Logger.log(`チャンク取得中: ${chunkStart.toISOString().split('T')[0]} 〜 ${chunkEnd.toISOString().split('T')[0]}`);
+      Logger.log(`チャンク: ${chunkStart.toISOString().split('T')[0]} 〜 ${chunkEnd.toISOString().split('T')[0]}`);
 
+      // q パラメータでサーバー側フィルタ（[Notion-Sync]イベントのみ取得）
+      const chunkEvents = [];
       let pageToken = null;
-      let pageCount = 0;
       do {
-        pageCount++;
         const params = {
           timeMin: chunkStart.toISOString(),
           timeMax: chunkEnd.toISOString(),
+          q: '[Notion-Sync]',
           singleEvents: true,
           orderBy: 'startTime',
           maxResults: 250
         };
         if (pageToken) params.pageToken = pageToken;
-
         const response = Calendar.Events.list(CONFIG.CALENDAR_ID, params);
-        const fetchedCount = response.items ? response.items.length : 0;
-        if (response.items) allItems.push(...response.items);
+        if (response.items) chunkEvents.push(...response.items);
         pageToken = response.nextPageToken || null;
         Logger.log(`    ページ${pageCount}: ${fetchedCount}件取得 / 累計: ${allItems.length}件${pageToken ? ' (次ページあり)' : ''}`);
       } while (pageToken);
-      Logger.log(`  → チャンク取得完了: ${chunkStart.toISOString().split('T')[0]} 〜 ${chunkEnd.toISOString().split('T')[0]} / 累計イベント数: ${allItems.length}件`);
+
+      // [Notion-Sync]の正確なフィルタ（qは部分一致のため）
+      const syncEvents = chunkEvents.filter(e =>
+        e.description && e.description.includes('[Notion-Sync]')
+      );
+      Logger.log(`  取得: ${syncEvents.length}件`);
+
+      // Notion IDでグルーピング
+      const groups = new Map();
+      syncEvents.forEach(event => {
+        const match = event.description.match(/\[Notion-Sync\]\s*Notion ID:\s*([a-f0-9-]+)/);
+        if (!match) return;
+        const nid = match[1];
+        if (!groups.has(nid)) groups.set(nid, []);
+        groups.get(nid).push(event);
+      });
+
+      // 重複を処理
+      groups.forEach((eventList, notionId) => {
+        if (eventList.length <= 1) return;
+        eventList.sort((a, b) => new Date(b.updated) - new Date(a.updated));
+        const duplicates = eventList.slice(1);
+        totalDuplicates += duplicates.length;
+        Logger.log(`  ${eventList[0].summary}: ${eventList.length}件 (削除対象: ${duplicates.length})`);
+
+        if (!dryRun) {
+          duplicates.forEach(dup => {
+            try {
+              Calendar.Events.remove(CONFIG.CALENDAR_ID, dup.id);
+              totalDeleted++;
+            } catch (e) {
+              Logger.log(`    削除失敗 (${dup.id}): ${e.message}`);
+            }
+          });
+        }
+      });
 
       chunkStart = chunkEnd;
     }
+    completed = true;
 
-    const syncEvents = allItems.filter(event =>
-      event.description && event.description.includes('[Notion-Sync]')
-    );
-    Logger.log(`取得イベント総数: ${allItems.length}件`);
-    Logger.log(`[Notion-Sync] イベント数: ${syncEvents.length}件`);
-
-    const groupByNotionId = new Map();
-    syncEvents.forEach(event => {
-      const match = event.description.match(/\[Notion-Sync\]\s*Notion ID:\s*([a-f0-9-]+)/);
-      const notionId = match ? match[1] : null;
-      if (!notionId) return;
-
-      if (!groupByNotionId.has(notionId)) {
-        groupByNotionId.set(notionId, []);
-      }
-      groupByNotionId.get(notionId).push(event);
-    });
-
-    let totalDuplicates = 0;
-    let totalDeleted = 0;
-
-    groupByNotionId.forEach((eventList, notionId) => {
-      if (eventList.length <= 1) return;
-
-      eventList.sort((a, b) => new Date(b.updated) - new Date(a.updated));
-      const keep = eventList[0];
-      const duplicates = eventList.slice(1);
-      totalDuplicates += duplicates.length;
-
-      Logger.log(`Notion ID: ${notionId} → ${eventList.length}件 (保持: ${keep.summary}, 削除対象: ${duplicates.length}件)`);
-
-      if (!dryRun) {
-        duplicates.forEach(dup => {
-          try {
-            Calendar.Events.remove(CONFIG.CALENDAR_ID, dup.id);
-            totalDeleted++;
-          } catch (e) {
-            Logger.log(`  削除失敗 (${dup.id}): ${e.message}`);
-          }
-        });
-      }
-    });
-
-    Logger.log(`--- 結果 ---`);
-    Logger.log(`重複グループ数: ${Array.from(groupByNotionId.values()).filter(v => v.length > 1).length}`);
+    // 完了 → 進捗をクリア
+    props.deleteProperty(PROGRESS_KEY);
+    Logger.log(`=== 完了 ===`);
     Logger.log(`重複イベント数: ${totalDuplicates}`);
     if (!dryRun) {
       Logger.log(`削除完了: ${totalDeleted}件`);
     } else {
       Logger.log(`※ ドライランのため削除は行われていません。実行するには cleanupDuplicateEvents(false) を呼び出してください`);
     }
-
-    return { totalDuplicates, totalDeleted };
+    return { totalDuplicates, totalDeleted, completed: true };
 
   } catch (error) {
-    Logger.log(`❌ クリーンアップエラー: ${error.message}`);
+    // エラー時も進捗を保存（次回再開可能）
+    props.setProperty(PROGRESS_KEY, JSON.stringify({
+      nextChunkStart: chunkStart.toISOString(),
+      totalDuplicates, totalDeleted
+    }));
+    Logger.log(`❌ エラー発生（進捗は保存済み、再実行で続行可能）: ${error.message}`);
     throw error;
   }
+}
+
+/**
+ * クリーンアップの進捗をリセット（最初からやり直す場合に使用）
+ */
+function resetCleanupProgress() {
+  PropertiesService.getScriptProperties().deleteProperty('CLEANUP_PROGRESS');
+  Logger.log('クリーンアップの進捗をリセットしました');
 }  
