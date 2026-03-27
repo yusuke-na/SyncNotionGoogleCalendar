@@ -281,8 +281,7 @@ Error: API call to calendar.events.insert failed with error: Calendar usage limi
 
 **Causes and Solutions:**  
 - ❌ Events outside the sync range were repeatedly created, exceeding Google Calendar API quotas
-  - ✅ Run `cleanupDuplicateEvents(true)` as a dry run to check the scale of duplicates
-  - ✅ Run `cleanupDuplicateEvents(false)` to delete duplicate events
+  - ✅ Run `cleanupDuplicateEvents()` to delete duplicate events (run repeatedly until complete)
   - ✅ Update to the latest version to apply the date range filter fix
 
 ### 🔍 Debugging Methods
@@ -321,11 +320,11 @@ function checkConfiguration() {
 
 #### Cleaning Up Duplicate Events
 ```javascript
-// Check for duplicate events (dry run)
-cleanupDuplicateEvents(true);
+// Detect and delete duplicate events (resumable, run repeatedly until complete)
+cleanupDuplicateEvents();
 
-// Delete duplicate events (execute)
-cleanupDuplicateEvents(false);
+// Reset progress and start over
+resetCleanupProgress();
 ```
 
 ### ⚠️ Important Notes

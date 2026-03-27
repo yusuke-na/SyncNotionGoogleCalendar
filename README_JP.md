@@ -279,8 +279,7 @@ Googleカレンダーから5件のイベントを取得
 
 **原因と解決方法:**  
 - ❌ 同期範囲外のイベントが繰り返し作成され、Google Calendar APIのクォータを超過
-  - ✅ `cleanupDuplicateEvents(true)` をドライランで実行し、重複の規模を確認
-  - ✅ `cleanupDuplicateEvents(false)` で重複イベントを削除
+  - ✅ `cleanupDuplicateEvents()` を実行して重複イベントを削除（完了まで繰り返し実行）
   - ✅ 最新バージョンに更新して日付範囲フィルターの修正を適用
 
 ### 🔍 デバッグ方法
@@ -319,11 +318,11 @@ function checkConfiguration() {
 
 #### 重複イベントのクリーンアップ
 ```javascript
-// 重複イベントの確認（ドライラン）
-cleanupDuplicateEvents(true);
+// 重複イベントの検出・削除（再開可能、完了まで繰り返し実行）
+cleanupDuplicateEvents();
 
-// 重複イベントの削除（実行）
-cleanupDuplicateEvents(false);
+// 進捗をリセットして最初からやり直す場合
+resetCleanupProgress();
 ```
 
 ### ⚠️ 注意事項

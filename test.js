@@ -462,11 +462,8 @@ function testImprovedSync() {
  * 重複する[Notion-Sync]イベントをクリーンアップ（再開可能）
  * Googleカレンダーから同一Notion IDの重複イベントを検出し、最新の1件を残して削除する。
  * 1週間ずつ処理し、進捗をScriptPropertiesに保存。タイムアウト時は再実行で続きから処理する。
- * @param {boolean} dryRun - trueの場合はログ出力のみ（実削除しない）
  */
-function cleanupDuplicateEvents(dryRun) {
-  if (dryRun === undefined) dryRun = false;
-
+function cleanupDuplicateEvents() {
   const CHUNK_DAYS = 7;
   const TIME_LIMIT_MS = 3 * 60 * 1000; // 3分で安全に停止（GAS上限6分）
   const startTime = Date.now();
@@ -486,10 +483,10 @@ function cleanupDuplicateEvents(dryRun) {
   const isResumed = saved !== null;
 
   if (isResumed) {
-    Logger.log(`=== クリーンアップ再開 ${dryRun ? '(ドライラン)' : '(実行)'} ===`);
+    Logger.log(`=== クリーンアップ再開 ===`);
     Logger.log(`前回の進捗: 重複${totalDuplicates}件検出, ${totalDeleted}件削除済, ${resumeFrom.toISOString().split('T')[0]}から再開`);
   } else {
-    Logger.log(`=== 重複イベントクリーンアップ開始 ${dryRun ? '(ドライラン)' : '(実行)'} ===`);
+    Logger.log(`=== 重複イベントクリーンアップ開始 ===`);
     Logger.log(`対象範囲: ${rangeStart.toISOString().split('T')[0]} 〜 ${rangeEnd.toISOString().split('T')[0]}`);
   }
 
@@ -570,17 +567,24 @@ function cleanupDuplicateEvents(dryRun) {
         totalDuplicates += duplicates.length;
         Logger.log(`  ${eventList[0].summary}: ${eventList.length}件 (削除対象: ${duplicates.length})`);
 
-        if (!dryRun) {
-          duplicates.forEach(dup => {
-            try {
-              Calendar.Events.remove(CONFIG.CALENDAR_ID, dup.id);
-              totalDeleted++;
-              Utilities.sleep(200);
-            } catch (e) {
-              Logger.log(`    削除失敗 (${dup.id}): ${e.message}`);
-              Utilities.sleep(1000);
-            }
-          });
+        for (let i = 0; i < duplicates.length; i++) {
+          if (Date.now() - startTime > TIME_LIMIT_MS) {
+            Logger.log(`⏱ 削除処理中に時間上限に到達。進捗を保存して中断します。`);
+            props.setProperty(PROGRESS_KEY, JSON.stringify({
+              nextChunkStart: chunkStart.toISOString(),
+              totalDuplicates, totalDeleted
+            }));
+            Logger.log(`--- 中間結果 --- 重複: ${totalDuplicates}件, 削除: ${totalDeleted}件`);
+            return { totalDuplicates, totalDeleted, completed: false };
+          }
+          try {
+            Calendar.Events.remove(CONFIG.CALENDAR_ID, duplicates[i].id);
+            totalDeleted++;
+            Utilities.sleep(200);
+          } catch (e) {
+            Logger.log(`    削除失敗 (${duplicates[i].id}): ${e.message}`);
+            Utilities.sleep(1000);
+          }
         }
       });
 
@@ -602,11 +606,7 @@ function cleanupDuplicateEvents(dryRun) {
     props.deleteProperty(PROGRESS_KEY);
     Logger.log(`=== 完了 ===`);
     Logger.log(`重複イベント数: ${totalDuplicates}`);
-    if (!dryRun) {
-      Logger.log(`削除完了: ${totalDeleted}件`);
-    } else {
-      Logger.log(`※ ドライランのため削除は行われていません。実行するには cleanupDuplicateEvents(false) を呼び出してください`);
-    }
+    Logger.log(`削除完了: ${totalDeleted}件`);
     return { totalDuplicates, totalDeleted, completed: true };
 
   } catch (error) {
