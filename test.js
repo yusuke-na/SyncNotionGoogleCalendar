@@ -464,7 +464,7 @@ function testImprovedSync() {
  * @param {boolean} dryRun - trueの場合はログ出力のみ（実削除しない）
  */
 function cleanupDuplicateEvents(dryRun) {
-  if (dryRun === undefined) dryRun = true;
+  if (dryRun === undefined) dryRun = false;
 
   const CHUNK_DAYS = 14;
   const TIME_LIMIT_MS = 5 * 60 * 1000; // 5分で安全に停止（GAS上限6分）
@@ -492,8 +492,9 @@ function cleanupDuplicateEvents(dryRun) {
     Logger.log(`対象範囲: ${rangeStart.toISOString().split('T')[0]} 〜 ${rangeEnd.toISOString().split('T')[0]}`);
   }
 
+  let chunkStart = new Date(resumeFrom);
+
   try {
-    let chunkStart = new Date(resumeFrom);
     let completed = false;
 
     while (chunkStart < rangeEnd) {
@@ -516,7 +517,9 @@ function cleanupDuplicateEvents(dryRun) {
       // q パラメータでサーバー側フィルタ（[Notion-Sync]イベントのみ取得）
       const chunkEvents = [];
       let pageToken = null;
+      let pageCount = 0;
       do {
+        pageCount++;
         const params = {
           timeMin: chunkStart.toISOString(),
           timeMax: chunkEnd.toISOString(),
@@ -527,9 +530,10 @@ function cleanupDuplicateEvents(dryRun) {
         };
         if (pageToken) params.pageToken = pageToken;
         const response = Calendar.Events.list(CONFIG.CALENDAR_ID, params);
+        const fetched = response.items ? response.items.length : 0;
         if (response.items) chunkEvents.push(...response.items);
         pageToken = response.nextPageToken || null;
-        Logger.log(`    ページ${pageCount}: ${fetchedCount}件取得 / 累計: ${allItems.length}件${pageToken ? ' (次ページあり)' : ''}`);
+        Logger.log(`  ページ${pageCount}: ${fetched}件取得 / 累計: ${chunkEvents.length}件${pageToken ? ' (次ページあり)' : ''}`);
       } while (pageToken);
 
       // [Notion-Sync]の正確なフィルタ（qは部分一致のため）
