@@ -456,4 +456,112 @@ function testImprovedSync() {
     Logger.log(`❌ 改善された同期機能テストエラー: ${error.message}`);  
     return false;  
   }  
+}
+
+/**
+ * 重複する[Notion-Sync]イベントをクリーンアップ
+ * 同一Notion IDを持つイベントが複数ある場合、最新の1件のみを残して削除する
+ * @param {boolean} dryRun - trueの場合はログ出力のみ（実削除しない）
+ */
+function cleanupDuplicateEvents(dryRun) {
+  if (dryRun === undefined) dryRun = true;
+  Logger.log(`=== 重複イベントクリーンアップ ${dryRun ? '(ドライラン)' : '(実行)'} ===`);
+
+  try {
+    const now = new Date();
+    const rangeStart = new Date(now.getTime() - (180 * 24 * 60 * 60 * 1000));
+    const rangeEnd = new Date(now.getTime() + (180 * 24 * 60 * 60 * 1000));
+
+    // 1ヶ月ごとのチャンクに分割して取得（Backend Error回避）
+    const allItems = [];
+    let chunkStart = new Date(rangeStart);
+    while (chunkStart < rangeEnd) {
+      const chunkEnd = new Date(Math.min(
+        chunkStart.getTime() + (30 * 24 * 60 * 60 * 1000),
+        rangeEnd.getTime()
+      ));
+      Logger.log(`チャンク取得中: ${chunkStart.toISOString().split('T')[0]} 〜 ${chunkEnd.toISOString().split('T')[0]}`);
+
+      let pageToken = null;
+      let pageCount = 0;
+      do {
+        pageCount++;
+        const params = {
+          timeMin: chunkStart.toISOString(),
+          timeMax: chunkEnd.toISOString(),
+          singleEvents: true,
+          orderBy: 'startTime',
+          maxResults: 250
+        };
+        if (pageToken) params.pageToken = pageToken;
+
+        const response = Calendar.Events.list(CONFIG.CALENDAR_ID, params);
+        const fetchedCount = response.items ? response.items.length : 0;
+        if (response.items) allItems.push(...response.items);
+        pageToken = response.nextPageToken || null;
+        Logger.log(`    ページ${pageCount}: ${fetchedCount}件取得 / 累計: ${allItems.length}件${pageToken ? ' (次ページあり)' : ''}`);
+      } while (pageToken);
+      Logger.log(`  → チャンク取得完了: ${chunkStart.toISOString().split('T')[0]} 〜 ${chunkEnd.toISOString().split('T')[0]} / 累計イベント数: ${allItems.length}件`);
+
+      chunkStart = chunkEnd;
+    }
+
+    const syncEvents = allItems.filter(event =>
+      event.description && event.description.includes('[Notion-Sync]')
+    );
+    Logger.log(`取得イベント総数: ${allItems.length}件`);
+    Logger.log(`[Notion-Sync] イベント数: ${syncEvents.length}件`);
+
+    const groupByNotionId = new Map();
+    syncEvents.forEach(event => {
+      const match = event.description.match(/\[Notion-Sync\]\s*Notion ID:\s*([a-f0-9-]+)/);
+      const notionId = match ? match[1] : null;
+      if (!notionId) return;
+
+      if (!groupByNotionId.has(notionId)) {
+        groupByNotionId.set(notionId, []);
+      }
+      groupByNotionId.get(notionId).push(event);
+    });
+
+    let totalDuplicates = 0;
+    let totalDeleted = 0;
+
+    groupByNotionId.forEach((eventList, notionId) => {
+      if (eventList.length <= 1) return;
+
+      eventList.sort((a, b) => new Date(b.updated) - new Date(a.updated));
+      const keep = eventList[0];
+      const duplicates = eventList.slice(1);
+      totalDuplicates += duplicates.length;
+
+      Logger.log(`Notion ID: ${notionId} → ${eventList.length}件 (保持: ${keep.summary}, 削除対象: ${duplicates.length}件)`);
+
+      if (!dryRun) {
+        duplicates.forEach(dup => {
+          try {
+            Calendar.Events.remove(CONFIG.CALENDAR_ID, dup.id);
+            totalDeleted++;
+          } catch (e) {
+            Logger.log(`  削除失敗 (${dup.id}): ${e.message}`);
+          }
+        });
+      }
+    });
+
+    Logger.log(`--- 結果 ---`);
+    Logger.log(`重複グループ数: ${Array.from(groupByNotionId.values()).filter(v => v.length > 1).length}`);
+    Logger.log(`重複イベント数: ${totalDuplicates}`);
+    if (!dryRun) {
+      Logger.log(`削除完了: ${totalDeleted}件`);
+    } else {
+      Logger.log(`※ ドライランのため削除は行われていません。実行するには cleanupDuplicateEvents(false) を呼び出してください`);
+    }
+
+    return { totalDuplicates, totalDeleted };
+
+  } catch (error) {
+    Logger.log(`❌ クリーンアップエラー: ${error.message}`);
+    throw error;
+  }
 }  

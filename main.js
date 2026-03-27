@@ -57,18 +57,31 @@ function syncNotionWithGoogleCalendar() {
   }  
 }  
 
+/**
+ * 同期対象の日付範囲を返す（Notion・Googleカレンダー共通）
+ * @return {Object} { start: Date, end: Date }
+ */
+function getSyncDateRange() {
+  const now = new Date();
+  return {
+    start: new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000)),
+    end: new Date(now.getTime() + (90 * 24 * 60 * 60 * 1000))
+  };
+}
+
 /**  
  * Notionから同期対象のスケジュールアイテムを取得
  */  
 function getNotionScheduleItems() {  
   try {  
-    // デバッグログ追加
     Logger.log(`SCHEDULE_TAG_ID: ${CONFIG.SCHEDULE_TAG_ID}`);
     Logger.log(`DATABASE_ID: ${CONFIG.NOTION_DATABASE_ID}`);
     
     const url = `https://api.notion.com/v1/databases/${CONFIG.NOTION_DATABASE_ID}/query`;  
+    const dateRange = getSyncDateRange();
+    const startDateStr = dateRange.start.toISOString().split('T')[0];
+    const endDateStr = dateRange.end.toISOString().split('T')[0];
     
-    // まずrelationタイプで試行
     const payload = {  
       filter: {  
         and: [  
@@ -81,9 +94,15 @@ function getNotionScheduleItems() {
           {  
             property: 'Action Day',  
             date: {  
-              is_not_empty: true  
+              on_or_after: startDateStr
             }  
-          }  
+          },
+          {  
+            property: 'Action Day',  
+            date: {  
+              on_or_before: endDateStr
+            }  
+          }
         ]  
       },  
       sorts: [  
@@ -161,13 +180,11 @@ function getPropertyValue(properties, propertyName) {
  */  
 function getGoogleCalendarEvents() {  
   try {  
-    const now = new Date();  
-    const oneMonthAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));  
-    const threeMonthLater = new Date(now.getTime() + (90 * 24 * 60 * 60 * 1000));  
+    const dateRange = getSyncDateRange();
     
     const events = Calendar.Events.list(CONFIG.CALENDAR_ID, {  
-      timeMin: oneMonthAgo.toISOString(),  
-      timeMax: threeMonthLater.toISOString(),  
+      timeMin: dateRange.start.toISOString(),  
+      timeMax: dateRange.end.toISOString(),  
       singleEvents: true,  
       orderBy: 'startTime',  
       maxResults: 1000  
@@ -289,7 +306,16 @@ function performSync(notionItems, calendarEvents) {
           result.updated++;  
         }  
       } else {  
-        // 新規作成  
+        // Notion側にEvent IDがあれば、カレンダーに存在するか確認（フェイルセーフ）
+        if (notionItem.eventId) {
+          try {
+            Calendar.Events.get(CONFIG.CALENDAR_ID, notionItem.eventId);
+            Logger.log(`既存イベント検出（範囲外）、スキップ: ${notionItem.title}`);
+            return;
+          } catch (e) {
+            // 404等 = イベント削除済み → 新規作成へ進む
+          }
+        }
         const eventId = createGoogleCalendarEvent(notionItem);  
         if (eventId) {  
           updateNotionEventId(notionItem.id, eventId);  
@@ -359,11 +385,7 @@ function needsUpdate(notionItem, calendarEvent) {
     }
   }
   
-  // 最終更新時刻の比較  
-  const notionUpdated = new Date(notionItem.lastEditedTime);  
-  const calendarUpdated = new Date(calendarEvent.updated);  
-  
-  return notionUpdated > calendarUpdated;  
+  return false;  
 }  
 
 /**  

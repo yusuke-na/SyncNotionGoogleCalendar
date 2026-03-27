@@ -141,6 +141,7 @@ initialize();
 #### 同期対象の条件
 - ✅ `Tags`に「Schedule」タグが含まれている
 - ✅ `Action Day`が設定されている
+- ✅ `Action Day`が同期範囲内（過去30日〜未来90日）である
 - ❌ 上記を満たさないアイテムは同期対象外
 
 ### 3️⃣ 自動同期の動作
@@ -271,6 +272,17 @@ Googleカレンダーから5件のイベントを取得
   - ✅ スクリプト実行時に必要な権限を承認
   - ✅ 「承認が必要です」の画面で「権限を確認」をクリック
 
+#### 7. **Calendar usage limits exceededエラー**
+```
+エラー: API call to calendar.events.insert failed with error: Calendar usage limits exceeded.
+```
+
+**原因と解決方法:**  
+- ❌ 同期範囲外のイベントが繰り返し作成され、Google Calendar APIのクォータを超過
+  - ✅ `cleanupDuplicateEvents(true)` をドライランで実行し、重複の規模を確認
+  - ✅ `cleanupDuplicateEvents(false)` で重複イベントを削除
+  - ✅ 最新バージョンに更新して日付範囲フィルターの修正を適用
+
 ### 🔍 デバッグ方法
 
 #### ログの確認
@@ -303,6 +315,15 @@ function checkConfiguration() {
   };
   Logger.log(config);
 }
+```
+
+#### 重複イベントのクリーンアップ
+```javascript
+// 重複イベントの確認（ドライラン）
+cleanupDuplicateEvents(true);
+
+// 重複イベントの削除（実行）
+cleanupDuplicateEvents(false);
 ```
 
 ### ⚠️ 注意事項

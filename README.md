@@ -143,6 +143,7 @@ This function performs the following:
 #### Sync Target Conditions
 - ✅ "Schedule" tag is included in `Tags`
 - ✅ `Action Day` is set
+- ✅ `Action Day` is within sync range (30 days ago to 90 days ahead)
 - ❌ Items not meeting the above criteria are excluded from sync
 
 ### 3️⃣ Automatic Sync Operation
@@ -273,6 +274,17 @@ Error: Insufficient permissions
   - ✅ Approve required permissions when executing script
   - ✅ Click "Review permissions" on "Authorization required" screen
 
+#### 7. **Calendar Usage Limits Exceeded**
+```
+Error: API call to calendar.events.insert failed with error: Calendar usage limits exceeded.
+```
+
+**Causes and Solutions:**  
+- ❌ Events outside the sync range were repeatedly created, exceeding Google Calendar API quotas
+  - ✅ Run `cleanupDuplicateEvents(true)` as a dry run to check the scale of duplicates
+  - ✅ Run `cleanupDuplicateEvents(false)` to delete duplicate events
+  - ✅ Update to the latest version to apply the date range filter fix
+
 ### 🔍 Debugging Methods
 
 #### Checking Logs
@@ -305,6 +317,15 @@ function checkConfiguration() {
   };
   Logger.log(config);
 }
+```
+
+#### Cleaning Up Duplicate Events
+```javascript
+// Check for duplicate events (dry run)
+cleanupDuplicateEvents(true);
+
+// Delete duplicate events (execute)
+cleanupDuplicateEvents(false);
 ```
 
 ### ⚠️ Important Notes
