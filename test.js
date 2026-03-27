@@ -460,14 +460,15 @@ function testImprovedSync() {
 
 /**
  * 重複する[Notion-Sync]イベントをクリーンアップ（再開可能）
- * 2週間ずつ処理し、進捗をScriptPropertiesに保存。タイムアウト時は再実行で続きから処理する。
+ * Googleカレンダーから同一Notion IDの重複イベントを検出し、最新の1件を残して削除する。
+ * 1週間ずつ処理し、進捗をScriptPropertiesに保存。タイムアウト時は再実行で続きから処理する。
  * @param {boolean} dryRun - trueの場合はログ出力のみ（実削除しない）
  */
 function cleanupDuplicateEvents(dryRun) {
   if (dryRun === undefined) dryRun = false;
 
-  const CHUNK_DAYS = 14;
-  const TIME_LIMIT_MS = 5 * 60 * 1000; // 5分で安全に停止（GAS上限6分）
+  const CHUNK_DAYS = 7;
+  const TIME_LIMIT_MS = 3 * 60 * 1000; // 3分で安全に停止（GAS上限6分）
   const startTime = Date.now();
   const props = PropertiesService.getScriptProperties();
   const PROGRESS_KEY = 'CLEANUP_PROGRESS';
@@ -518,7 +519,12 @@ function cleanupDuplicateEvents(dryRun) {
       const chunkEvents = [];
       let pageToken = null;
       let pageCount = 0;
+      let timedOut = false;
       do {
+        if (Date.now() - startTime > TIME_LIMIT_MS) {
+          timedOut = true;
+          break;
+        }
         pageCount++;
         const params = {
           timeMin: chunkStart.toISOString(),
@@ -536,11 +542,15 @@ function cleanupDuplicateEvents(dryRun) {
         Logger.log(`  ページ${pageCount}: ${fetched}件取得 / 累計: ${chunkEvents.length}件${pageToken ? ' (次ページあり)' : ''}`);
       } while (pageToken);
 
+      if (timedOut) {
+        Logger.log(`⏱ ページ取得中に時間上限に到達。取得済みイベントで重複処理を実行してから中断します。`);
+      }
+
       // [Notion-Sync]の正確なフィルタ（qは部分一致のため）
       const syncEvents = chunkEvents.filter(e =>
         e.description && e.description.includes('[Notion-Sync]')
       );
-      Logger.log(`  取得: ${syncEvents.length}件`);
+      Logger.log(`  取得: ${syncEvents.length}件${timedOut ? ' (部分取得)' : ''}`);
 
       // Notion IDでグルーピング
       const groups = new Map();
@@ -552,7 +562,7 @@ function cleanupDuplicateEvents(dryRun) {
         groups.get(nid).push(event);
       });
 
-      // 重複を処理
+      // 重複を処理（タイムアウト時も取得済み分は処理する）
       groups.forEach((eventList, notionId) => {
         if (eventList.length <= 1) return;
         eventList.sort((a, b) => new Date(b.updated) - new Date(a.updated));
@@ -565,12 +575,24 @@ function cleanupDuplicateEvents(dryRun) {
             try {
               Calendar.Events.remove(CONFIG.CALENDAR_ID, dup.id);
               totalDeleted++;
+              Utilities.sleep(200);
             } catch (e) {
               Logger.log(`    削除失敗 (${dup.id}): ${e.message}`);
+              Utilities.sleep(1000);
             }
           });
         }
       });
+
+      // タイムアウト時は同じチャンクから再開（削除済み分が減るので次回は先に進める）
+      if (timedOut) {
+        props.setProperty(PROGRESS_KEY, JSON.stringify({
+          nextChunkStart: chunkStart.toISOString(),
+          totalDuplicates, totalDeleted
+        }));
+        Logger.log(`--- 中間結果 --- 重複: ${totalDuplicates}件, 削除: ${totalDeleted}件`);
+        return { totalDuplicates, totalDeleted, completed: false };
+      }
 
       chunkStart = chunkEnd;
     }
