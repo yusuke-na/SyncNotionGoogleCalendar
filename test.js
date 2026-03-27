@@ -465,7 +465,7 @@ function testImprovedSync() {
  */
 function cleanupDuplicateEvents() {
   const CHUNK_DAYS = 7;
-  const TIME_LIMIT_MS = 3 * 60 * 1000; // 3分で安全に停止（GAS上限6分）
+  const TIME_LIMIT_MS = 5 * 60 * 1000; // 5分で安全に停止（GAS上限6分）
   const startTime = Date.now();
   const props = PropertiesService.getScriptProperties();
   const PROGRESS_KEY = 'CLEANUP_PROGRESS';
