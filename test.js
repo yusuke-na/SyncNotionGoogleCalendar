@@ -513,13 +513,14 @@ function cleanupDuplicateEvents() {
       Logger.log(`チャンク: ${chunkStart.toISOString().split('T')[0]} 〜 ${chunkEnd.toISOString().split('T')[0]}`);
 
       // q パラメータでサーバー側フィルタ（[Notion-Sync]イベントのみ取得）
+      const FETCH_LIMIT = 3500;
       const chunkEvents = [];
       let pageToken = null;
       let pageCount = 0;
-      let timedOut = false;
+      let fetchLimitReached = false;
       do {
-        if (Date.now() - startTime > TIME_LIMIT_MS) {
-          timedOut = true;
+        if (chunkEvents.length >= FETCH_LIMIT) {
+          fetchLimitReached = true;
           break;
         }
         pageCount++;
@@ -539,15 +540,15 @@ function cleanupDuplicateEvents() {
         Logger.log(`  ページ${pageCount}: ${fetched}件取得 / 累計: ${chunkEvents.length}件${pageToken ? ' (次ページあり)' : ''}`);
       } while (pageToken);
 
-      if (timedOut) {
-        Logger.log(`⏱ ページ取得中に時間上限に到達。取得済みイベントで重複処理を実行してから中断します。`);
+      if (fetchLimitReached) {
+        Logger.log(`  取得上限(${FETCH_LIMIT}件)に到達。取得済みイベントで重複処理を実行してから中断します。`);
       }
 
       // [Notion-Sync]の正確なフィルタ（qは部分一致のため）
       const syncEvents = chunkEvents.filter(e =>
         e.description && e.description.includes('[Notion-Sync]')
       );
-      Logger.log(`  取得: ${syncEvents.length}件${timedOut ? ' (部分取得)' : ''}`);
+      Logger.log(`  取得: ${syncEvents.length}件${fetchLimitReached ? ' (部分取得)' : ''}`);
 
       // Notion IDでグルーピング
       const groups = new Map();
@@ -588,8 +589,8 @@ function cleanupDuplicateEvents() {
         }
       });
 
-      // タイムアウト時は同じチャンクから再開（削除済み分が減るので次回は先に進める）
-      if (timedOut) {
+      // 取得上限到達時は同じチャンクから再開（削除済み分が減るので次回は先に進める）
+      if (fetchLimitReached) {
         props.setProperty(PROGRESS_KEY, JSON.stringify({
           nextChunkStart: chunkStart.toISOString(),
           totalDuplicates, totalDeleted
