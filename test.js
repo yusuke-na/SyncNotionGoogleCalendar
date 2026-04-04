@@ -513,7 +513,7 @@ function cleanupDuplicateEvents() {
       Logger.log(`チャンク: ${chunkStart.toISOString().split('T')[0]} 〜 ${chunkEnd.toISOString().split('T')[0]}`);
 
       // q パラメータでサーバー側フィルタ（[Notion-Sync]イベントのみ取得）
-      const FETCH_LIMIT = 3500;
+      const FETCH_LIMIT = 750;
       const chunkEvents = [];
       let pageToken = null;
       let pageCount = 0;
