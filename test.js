@@ -581,7 +581,7 @@ function cleanupDuplicateEvents() {
           try {
             Calendar.Events.remove(CONFIG.CALENDAR_ID, duplicates[i].id);
             totalDeleted++;
-            Utilities.sleep(200);
+            Utilities.sleep(100);
           } catch (e) {
             Logger.log(`    削除失敗 (${duplicates[i].id}): ${e.message}`);
             Utilities.sleep(1000);
